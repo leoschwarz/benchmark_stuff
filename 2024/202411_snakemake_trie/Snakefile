@@ -1,0 +1,215 @@
+from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+from tqdm import tqdm
+import altair as alt
+import importlib
+import json
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pickle
+import polars as pl
+import random
+import seaborn as sns
+import time
+import timeit
+
+@dataclass(frozen=True)
+class Product:
+    path: str
+
+    def constant_prefix(self) -> str:
+        return self.path.split('WILDCARD')[0]
+
+    def constant_suffix(self) -> str:
+        return self.path.split('WILDCARD')[1]
+
+
+@dataclass(frozen=True)
+class MyRule:
+    name: str
+    paths: list[str]
+
+    def products(self):
+        return [Product(path) for path in self.paths]
+
+    def __hash__(self):
+        return hash(self.name)
+
+
+def generate_rules_fn(n_rules, n_paths_per_rule, n_combined_matches):
+    rules = []
+    groups = []
+
+    for i_rule_min in range(0, n_rules, n_combined_matches // 2):
+        common_prefix = f"/path/to/group/{i_rule_min}"
+        groups.append(group := [])
+        for i_rule in range(i_rule_min, i_rule_min + n_combined_matches):
+            paths = [f"{common_prefix}/{i_path}/WILDCARD/rule{i_rule}/something.txt" for i_path in range(n_paths_per_rule)]
+            rule_ = MyRule(name=f"rule_{i_rule}", paths=paths)
+            rules.append(rule_)
+            group.append(rule_)
+    
+    return rules, groups
+
+
+rule generate_rules:
+    output: "data/rules_{n_rules}_{n_perrule}_{groupsize}.pkl"
+    run:
+        rules, groups = generate_rules_fn(int(wildcards.n_rules), int(wildcards.n_perrule), int(wildcards.groupsize))
+        with open(output[0], 'wb') as f:
+            pickle.dump((rules, groups), f)
+
+
+rule compute_benchmark:
+    input: "data/rules_{n_rules}_{n_perrule}_{groupsize}.pkl"
+    output: "data/benchmark_r{n_rules}_p{n_perrule}_g{groupsize}_variant_{variant}.json"
+    run:
+        with open(input[0], 'rb') as f:
+            rules, groups = pickle.load(f)
+
+        all_paths = [path for group in groups for rule_ in group for path in rule_.paths]
+        # shuffle
+        random.seed(42)
+        random.shuffle(all_paths)
+        random_sequence = all_paths[:1000]
+        
+        OutputIndex = importlib.import_module(f"output_index.impl_{wildcards.variant}").OutputIndex
+
+        # assert correctness for rule_0 (sanity check)
+        output_index = OutputIndex(rules)
+        matches = output_index.match("/path/to/group/0/0/abc/rule0/something.txt")
+        assert len(matches) == 1
+        assert list(matches)[0].name == "rule_0"
+
+        # benchmark
+        def fn():
+            _ = [output_index.match(p) for p in random_sequence]
+        times = [timeit.timeit(fn, number=1) for _ in tqdm(range(10))]
+        result = {
+            "times": times,
+            "n_rules": int(wildcards.n_rules),
+            "n_perrule": int(wildcards.n_perrule),
+            "groupsize": int(wildcards.groupsize),
+            "variant": wildcards.variant
+        }
+        with open(output[0], 'w') as f:
+            json.dump(result, f)
+
+rule compute_benchmark_constructor:
+    input: "data/rules_{n_rules}_{n_perrule}_{groupsize}.pkl"
+    output: "data/benchmark_constructor_r{n_rules}_p{n_perrule}_g{groupsize}_variant_{variant}.json"
+    run:
+
+        with open(input[0], 'rb') as f:
+            rules, groups = pickle.load(f)
+
+        OutputIndex = importlib.import_module(f"output_index.impl_{wildcards.variant}").OutputIndex
+
+        # benchmark
+        def fn():
+            _ = OutputIndex(rules)
+        times = [timeit.timeit(fn, number=1) for _ in tqdm(range(10))]
+        result = {
+            "times": times,
+            "n_rules": int(wildcards.n_rules),
+            "n_perrule": int(wildcards.n_perrule),
+            "groupsize": int(wildcards.groupsize),
+            "variant": wildcards.variant
+        }
+        with open(output[0], 'w') as f:
+            json.dump(result, f)
+
+n_rules_small = np.arange(10, 5001, 100, dtype=int)
+n_rules_large = np.arange(10000, 50001, 10000, dtype=int)
+variants = ["datrie","sort"]
+
+def collect_benchmark(input_files, output_file):
+    data = pl.DataFrame([json.loads(Path(inputfile).read_text()) for inputfile in input_files])
+    data.write_parquet(output_file)
+
+
+rule collect_benchmark_small:
+    input:
+        files=expand("data/benchmark_r{n_rules}_p{{n_perrule}}_g{{groupsize}}_variant_{variant}.json", n_rules=n_rules_small, variant=variants)
+    output:
+        "data/benchmark_small_p{n_perrule}_g{groupsize}.parquet"
+    run:
+        collect_benchmark(input.files, output[0])
+
+
+rule collect_benchmark_large:
+    input:
+        files=expand("data/benchmark_r{n_rules}_p{{n_perrule}}_g{{groupsize}}_variant_{variant}.json", n_rules=n_rules_large, variant=variants)
+    output:
+        "data/benchmark_large_p{n_perrule}_g{groupsize}.parquet"
+    run:
+        collect_benchmark(input.files, output[0])
+
+
+rule collect_benchmark_constructor_small:
+    input:
+        files=expand("data/benchmark_constructor_r{n_rules}_p{{n_perrule}}_g{{groupsize}}_variant_{variant}.json", n_rules=n_rules_small, variant=variants)
+    output:
+        "data/benchmark_constructor_small_p{n_perrule}_g{groupsize}.parquet"
+    run:
+        collect_benchmark(input.files, output[0])
+
+rule collect_benchmark_constructor_large:
+    input:
+        files=expand("data/benchmark_constructor_r{n_rules}_p{{n_perrule}}_g{{groupsize}}_variant_{variant}.json", n_rules=n_rules_large, variant=variants)
+    output:
+        "data/benchmark_constructor_large_p{n_perrule}_g{groupsize}.parquet"
+    run:
+        collect_benchmark(input.files, output[0])
+
+rule plot_benchmark:
+    input:
+        "data/benchmark_{variant}_p{n_perrule}_g{groupsize}.parquet"
+    output:
+        "result/lookup_{variant}_p{n_perrule}_g{groupsize}.pdf"
+    run:
+
+        data = pl.read_parquet(input[0])
+        df = data.with_columns(time=pl.col("times")).explode("time")
+
+        test_param_keys = ["n_rules", "n_perrule", "groupsize"]
+        #df_baseline = df.filter(variant="datrie")[test_param_keys + ["time"]].rename({"time": "time_baseline"})
+        df_baseline = df.filter(variant="datrie")[test_param_keys + ["time"]].rename({"time": "time_baseline"}).group_by(test_param_keys).agg(pl.col("time_baseline").mean())
+        df_rel = df.join(df_baseline, on=test_param_keys, how="left").with_columns(time_rel=pl.col("time") / pl.col("time_baseline"))
+
+        matplotlib.use('agg')
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+        sns.set_style("darkgrid")
+        sns.lineplot(data=df_rel.to_pandas(), x="n_rules", y="time_rel", hue="variant", ax=axs[0])
+        axs[0].set_title(f"Performance for n_perrule={wildcards.n_perrule}, groupsize={wildcards.groupsize}")
+        sns.lineplot(data=df.to_pandas(), x="n_rules", y="time", hue="variant", ax=axs[1])
+        axs[1].set_title(f"Performance for n_perrule={wildcards.n_perrule}, groupsize={wildcards.groupsize}")
+        fig.savefig(output[0], bbox_inches='tight')
+
+rule plot_benchmark_constructor:
+    input:
+        "data/benchmark_constructor_{variant}_p{n_perrule}_g{groupsize}.parquet"
+    output:
+        "result/constructor_{variant}_p{n_perrule}_g{groupsize}.pdf"
+    run:
+
+        data = pl.read_parquet(input[0])
+        df = data.with_columns(time=pl.col("times")).explode("time")
+
+        test_param_keys = ["n_rules", "n_perrule", "groupsize"]
+        #df_baseline = df.filter(variant="datrie")[test_param_keys + ["time"]].rename({"time": "time_baseline"})
+        df_baseline = df.filter(variant="datrie")[test_param_keys + ["time"]].rename({"time": "time_baseline"}).group_by(test_param_keys).agg(pl.col("time_baseline").mean())
+        df_rel = df.join(df_baseline, on=test_param_keys, how="left").with_columns(time_rel=pl.col("time") / pl.col("time_baseline"))
+
+        matplotlib.use('agg')
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+        sns.set_style("darkgrid")
+        sns.lineplot(data=df_rel.to_pandas(), x="n_rules", y="time_rel", hue="variant", ax=axs[0])
+        axs[0].set_title(f"Constructor performance for n_perrule={wildcards.n_perrule}, groupsize={wildcards.groupsize}")
+        sns.lineplot(data=df.to_pandas(), x="n_rules", y="time", hue="variant", ax=axs[1])
+        axs[1].set_title(f"Constructor performance for n_perrule={wildcards.n_perrule}, groupsize={wildcards.groupsize}")
+        fig.savefig(output[0], bbox_inches='tight')
