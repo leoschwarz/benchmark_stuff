@@ -16,7 +16,7 @@ import time
 import timeit
 
 
-BENCH_TIMEOUT = 15
+BENCH_TIMEOUT = 30
 
 
 @dataclass(frozen=True)
