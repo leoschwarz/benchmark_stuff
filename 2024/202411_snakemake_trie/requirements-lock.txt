@@ -109,6 +109,8 @@ psutil==6.1.0
     #   wrapt-timeout-decorator
 pulp==2.9.0
     # via snakemake
+pyarrow==18.0.0
+    # via -r requirements.txt
 pyparsing==3.2.0
     # via matplotlib
 python-dateutil==2.9.0.post0

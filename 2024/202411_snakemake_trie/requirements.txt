@@ -1,6 +1,7 @@
 matplotlib
 numpy
 polars
+pyarrow
 seaborn
 snakemake
 tqdm

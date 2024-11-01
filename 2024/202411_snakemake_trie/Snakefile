@@ -2,7 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
-from wrapt_timeout_decorator import timeout, TimeoutError
+from wrapt_timeout_decorator import timeout
 import importlib
 import json
 import matplotlib
@@ -16,7 +16,7 @@ import time
 import timeit
 
 
-BENCH_TIMEOUT = 0.01
+BENCH_TIMEOUT = 15
 
 
 @dataclass(frozen=True)
