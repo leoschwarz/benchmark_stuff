@@ -2,7 +2,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
-import altair as alt
 import importlib
 import json
 import matplotlib

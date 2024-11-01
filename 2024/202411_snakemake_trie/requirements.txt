@@ -1,0 +1,6 @@
+snakemake
+tqdm
+seaborn
+polars
+matplotlib
+numpy
