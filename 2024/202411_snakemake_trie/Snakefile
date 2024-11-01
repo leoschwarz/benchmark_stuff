@@ -42,7 +42,7 @@ def generate_rules_fn(n_rules, n_paths_per_rule, n_combined_matches):
     rules = []
     groups = []
 
-    for i_rule_min in range(0, n_rules, n_combined_matches // 2):
+    for i_rule_min in range(0, n_rules, max(n_combined_matches // 2, 1)):
         common_prefix = f"/path/to/group/{i_rule_min}"
         groups.append(group := [])
         for i_rule in range(i_rule_min, i_rule_min + n_combined_matches):
@@ -53,6 +53,10 @@ def generate_rules_fn(n_rules, n_paths_per_rule, n_combined_matches):
     
     return rules, groups
 
+rule all:
+    input:
+        expand("result/constructor_{dataset}_p{n_perrule}_g{groupsize}.pdf", dataset=["small", "large"], n_perrule=[1, 10, 100], groupsize=[1, 10, 100]),
+        expand("result/lookup_{dataset}_p{n_perrule}_g{groupsize}.pdf", dataset=["small", "large"], n_perrule=[1, 10, 100], groupsize=[1, 10, 100])
 
 rule generate_rules:
     output: "data/rules_{n_rules}_{n_perrule}_{groupsize}.pkl"
@@ -166,11 +170,10 @@ rule collect_benchmark_constructor_large:
 
 rule plot_benchmark:
     input:
-        "data/benchmark_{variant}_p{n_perrule}_g{groupsize}.parquet"
+        "data/benchmark_{dataset}_p{n_perrule}_g{groupsize}.parquet"
     output:
-        "result/lookup_{variant}_p{n_perrule}_g{groupsize}.pdf"
+        "result/lookup_{dataset}_p{n_perrule}_g{groupsize}.pdf"
     run:
-
         data = pl.read_parquet(input[0])
         df = data.with_columns(time=pl.col("times")).explode("time")
 
@@ -191,9 +194,9 @@ rule plot_benchmark:
 
 rule plot_benchmark_constructor:
     input:
-        "data/benchmark_constructor_{variant}_p{n_perrule}_g{groupsize}.parquet"
+        "data/benchmark_constructor_{dataset}_p{n_perrule}_g{groupsize}.parquet"
     output:
-        "result/constructor_{variant}_p{n_perrule}_g{groupsize}.pdf"
+        "result/constructor_{dataset}_p{n_perrule}_g{groupsize}.pdf"
     run:
 
         data = pl.read_parquet(input[0])
@@ -213,3 +216,5 @@ rule plot_benchmark_constructor:
         sns.lineplot(data=df.to_pandas(), x="n_rules", y="time", hue="variant", ax=axs[1])
         axs[1].set_title(f"Constructor performance for n_perrule={wildcards.n_perrule}, groupsize={wildcards.groupsize}")
         fig.savefig(output[0], bbox_inches='tight')
+
+    
