@@ -1,6 +1,6 @@
-snakemake
-tqdm
-seaborn
-polars
 matplotlib
 numpy
+polars
+seaborn
+snakemake
+tqdm
