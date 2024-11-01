@@ -4,3 +4,4 @@ polars
 seaborn
 snakemake
 tqdm
+wrapt_timeout_decorator

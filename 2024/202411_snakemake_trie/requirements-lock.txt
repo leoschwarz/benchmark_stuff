@@ -14,6 +14,10 @@ certifi==2024.8.30
     # via requests
 charset-normalizer==3.4.0
     # via requests
+cli-exit-tools==1.2.7
+    # via wrapt-timeout-decorator
+click==8.1.7
+    # via cli-exit-tools
 conda-inject==1.3.2
     # via snakemake
 configargparse==1.7
@@ -28,6 +32,10 @@ cycler==0.12.1
     # via matplotlib
 datrie==0.8.2
     # via snakemake
+dill==0.3.9
+    # via
+    #   multiprocess
+    #   wrapt-timeout-decorator
 docutils==0.21.2
     # via snakemake
 dpath==2.2.0
@@ -60,12 +68,18 @@ jupyter-core==5.7.2
     # via nbformat
 kiwisolver==1.4.7
     # via matplotlib
+lib-detect-testenv==2.0.8
+    # via
+    #   cli-exit-tools
+    #   wrapt-timeout-decorator
 markupsafe==3.0.2
     # via jinja2
 matplotlib==3.9.2
     # via
     #   -r requirements.txt
     #   seaborn
+multiprocess==0.70.17
+    # via wrapt-timeout-decorator
 nbformat==5.10.4
     # via snakemake
 numpy==2.1.2
@@ -90,7 +104,9 @@ platformdirs==4.3.6
 polars==1.12.0
     # via -r requirements.txt
 psutil==6.1.0
-    # via snakemake
+    # via
+    #   snakemake
+    #   wrapt-timeout-decorator
 pulp==2.9.0
     # via snakemake
 pyparsing==3.2.0
@@ -164,5 +180,8 @@ wrapt==1.16.0
     #   smart-open
     #   snakemake
     #   snakemake-interface-storage-plugins
+    #   wrapt-timeout-decorator
+wrapt-timeout-decorator==1.5.1
+    # via -r requirements.txt
 yte==1.5.4
     # via snakemake
