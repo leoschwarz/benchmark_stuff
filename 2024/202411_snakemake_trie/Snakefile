@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from tqdm import tqdm
+from wrapt_timeout_decorator import timeout, TimeoutError
 import importlib
 import json
 import matplotlib
@@ -13,6 +14,9 @@ import random
 import seaborn as sns
 import time
 import timeit
+
+
+BENCH_TIMEOUT = 0.01
 
 
 @dataclass(frozen=True)
@@ -105,26 +109,38 @@ rule compute_benchmark:
             f"output_index.impl_{wildcards.variant}"
         ).OutputIndex
 
-        # assert correctness for rule_0 (sanity check)
-        output_index = OutputIndex(rules)
-        matches = output_index.match("/path/to/group/0/0/abc/rule0/something.txt")
-        assert len(matches) == 1
-        assert list(matches)[0].name == "rule_0"
+
+        @timeout(BENCH_TIMEOUT)
+        def get_index():
+            return OutputIndex(rules)
 
 
-        # benchmark
+        @timeout(BENCH_TIMEOUT)
         def fn():
             _ = [output_index.match(p) for p in random_sequence]
 
 
-        times = [timeit.timeit(fn, number=1) for _ in tqdm(range(10))]
-        result = {
-            "times": times,
-            "n_rules": int(wildcards.n_rules),
-            "n_perrule": int(wildcards.n_perrule),
-            "groupsize": int(wildcards.groupsize),
-            "variant": wildcards.variant,
-        }
+        try:
+            output_index = get_index()
+
+            # assert correctness for rule_0 (sanity check)
+            matches = output_index.match("/path/to/group/0/0/abc/rule0/something.txt")
+            assert len(matches) == 1
+            assert list(matches)[0].name == "rule_0"
+
+            times = [timeit.timeit(fn, number=1) for _ in tqdm(range(10))]
+
+            result = {
+                "times": times,
+                "n_rules": int(wildcards.n_rules),
+                "n_perrule": int(wildcards.n_perrule),
+                "groupsize": int(wildcards.groupsize),
+                "variant": wildcards.variant,
+            }
+
+        except TimeoutError:
+            result = {}
+
         with open(output[0], "w") as f:
             json.dump(result, f)
 
@@ -144,18 +160,24 @@ rule compute_benchmark_constructor:
 
 
         # benchmark
+        @timeout(BENCH_TIMEOUT)
         def fn():
             _ = OutputIndex(rules)
 
 
-        times = [timeit.timeit(fn, number=1) for _ in tqdm(range(10))]
-        result = {
-            "times": times,
-            "n_rules": int(wildcards.n_rules),
-            "n_perrule": int(wildcards.n_perrule),
-            "groupsize": int(wildcards.groupsize),
-            "variant": wildcards.variant,
-        }
+        try:
+            times = [timeit.timeit(fn, number=1) for _ in tqdm(range(10))]
+            result = {
+                "times": times,
+                "n_rules": int(wildcards.n_rules),
+                "n_perrule": int(wildcards.n_perrule),
+                "groupsize": int(wildcards.groupsize),
+                "variant": wildcards.variant,
+            }
+        except TimeoutError:
+            print("Timeout error...")
+            result = {}
+
         with open(output[0], "w") as f:
             json.dump(result, f)
 
