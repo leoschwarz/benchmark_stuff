@@ -324,3 +324,38 @@ rule plot_benchmark_constructor:
             f"Constructor performance for n_perrule={wildcards.n_perrule}, groupsize={wildcards.groupsize}"
         )
         fig.savefig(output[0], bbox_inches="tight")
+
+
+rule scatter_lookup_plot:
+    input:
+        expand(
+            "data/benchmark_{dataset}_p{n_perrule}_g{groupsize}.parquet",
+            dataset=["small", "large"],
+            n_perrule=[1, 10, 100],
+            groupsize=[1, 10, 100],
+        ),
+    output:
+        "result/scatter_plot.pdf",
+    run:
+        data_individual = [pl.read_parquet(inputfile) for inputfile in input]
+        data = pl.concat(data_individual)
+
+        # plot 1 point per configuration
+        df = data.group_by(["n_rules", "n_perrule", "groupsize", "variant"]).agg(
+            pl.col("times").mean().alias("time")
+        )
+
+        matplotlib.use("agg")
+        plt.figure(figsize=(12, 12))
+
+        sns.scatterplot(
+            data=df.to_pandas(),
+            x="n_rules",
+            y="time",
+            hue="variant",
+            style="variant",
+            size="n_perrule",
+            sizes=(50, 200),
+        )
+
+        plt.savefig(output[0], bbox_inches="tight")
