@@ -75,6 +75,7 @@ rule all:
             n_perrule=[1, 10, 100],
             groupsize=[1, 10, 100],
         ),
+        "result/scatter_plot.pdf",
 
 
 rule generate_rules:
@@ -358,4 +359,4 @@ rule scatter_lookup_plot:
             sizes=(50, 200),
         )
 
-        plt.savefig(output[0], bbox_inches="tight")
+        plt.savefig(output, bbox_inches="tight")
