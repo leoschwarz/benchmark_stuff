@@ -75,7 +75,8 @@ rule all:
             n_perrule=[1, 10, 100],
             groupsize=[1, 10, 100],
         ),
-        "result/scatter_plot.pdf",
+        "result/scatter_lookup.pdf",
+        "result/scatter_constructor.pdf",
 
 
 rule generate_rules:
@@ -342,7 +343,7 @@ rule scatter_lookup_plot:
             groupsize=[1, 10, 100],
         ),
     output:
-        "result/scatter_plot.pdf",
+        "result/scatter_lookup.pdf",
     run:
         data_individual = [pl.read_parquet(inputfile) for inputfile in input]
         # drop empty data frames
@@ -386,7 +387,7 @@ rule scatter_lookup_plot:
             )
         )
         make_plot(df_plot, axs[0])
-        axs[0].set_title("Mean per configuration")
+        axs[0].set_title("Per configuration (all input sizes)")
 
         df_plot = data.group_by(["n_perrule", "groupsize", "variant", "n_rules"]).agg(
             time_mean=pl.col("time").mean()
@@ -401,6 +402,81 @@ rule scatter_lookup_plot:
         )
 
         make_plot(df_plot, axs[1])
-        axs[1].set_title("Per individual inupt size")
+        axs[1].set_title("Per individual input size")
+        fig.suptitle("Lookup performance")
+
+        fig.savefig(output[0], bbox_inches="tight")
+
+
+rule scatter_constructor_plot:
+    input:
+        expand(
+            "data/benchmark_constructor_{dataset}_p{n_perrule}_g{groupsize}.parquet",
+            dataset=["small", "large"],
+            n_perrule=[1, 10, 100],
+            groupsize=[1, 10, 100],
+        ),
+    output:
+        "result/scatter_constructor.pdf",
+    run:
+        data_individual = [pl.read_parquet(inputfile) for inputfile in input]
+        # drop empty data frames
+        data_individual = [df for df in data_individual if len(df) > 0]
+        # combine
+        data = pl.concat(data_individual).drop_nulls()
+        # add time column (for mean)
+        data = data.with_columns(time=pl.col("times").list.mean())
+
+
+        def make_plot(df_plot, ax):
+            sns.set_context("talk")
+            sns.set_style("whitegrid")
+            # plt.figure(figsize=(6, 6))
+
+            max_time = (
+                max(df_plot["time_sort"].max(), df_plot["time_datrie"].max()) * 1.05
+            )
+
+            # add linear function
+            x = np.linspace(0, max_time, 100)
+            plt.plot(x, x, color="gray", linestyle="--")
+
+            sns.scatterplot(df_plot, x="time_sort", y="time_datrie", size=1, ax=ax)
+            ax.set_aspect(1.0)
+            ax.set_xlim(0, max_time)
+            ax.set_ylim(0, max_time)
+
+
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+        df_plot = data.group_by(["n_perrule", "groupsize", "variant"]).agg(
+            time_mean=pl.col("time").mean()
+        )
+        df_plot = (
+            df_plot.filter(variant="sort")
+            .rename({"time_mean": "time_sort"})
+            .join(
+                df_plot.filter(variant="datrie").rename({"time_mean": "time_datrie"}),
+                on=["n_perrule", "groupsize"],
+            )
+        )
+        make_plot(df_plot, axs[0])
+        axs[0].set_title("Per configuration (all input sizes)")
+
+        df_plot = data.group_by(["n_perrule", "groupsize", "variant", "n_rules"]).agg(
+            time_mean=pl.col("time").mean()
+        )
+        df_plot = (
+            df_plot.filter(variant="sort")
+            .rename({"time_mean": "time_sort"})
+            .join(
+                df_plot.filter(variant="datrie").rename({"time_mean": "time_datrie"}),
+                on=["n_perrule", "groupsize", "n_rules"],
+            )
+        )
+
+        make_plot(df_plot, axs[1])
+        axs[1].set_title("Per individual input size")
+        fig.suptitle("Constructor performance")
 
         fig.savefig(output[0], bbox_inches="tight")
