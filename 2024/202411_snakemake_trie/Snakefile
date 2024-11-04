@@ -254,8 +254,14 @@ rule plot_benchmark:
         "result/lookup_{dataset}_p{n_perrule}_g{groupsize}.pdf",
     run:
         data = pl.read_parquet(input[0])
-        df = data.with_columns(time=pl.col("times")).explode("time")
+        if len(data) == 0:
+            # empty plot
+            matplotlib.use("agg")
+            fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+            fig.savefig(output[0], bbox_inches="tight")
+            return
 
+        df = data.with_columns(time=pl.col("times")).explode("time")
         test_param_keys = ["n_rules", "n_perrule", "groupsize"]
         # df_baseline = df.filter(variant="datrie")[test_param_keys + ["time"]].rename({"time": "time_baseline"})
         df_baseline = (
@@ -338,7 +344,7 @@ rule scatter_lookup_plot:
     output:
         "result/scatter_plot.pdf",
     run:
-        data_individual = [pl.read_parquet(inputfile) for inputfile in snakemake.input]
+        data_individual = [pl.read_parquet(inputfile) for inputfile in input]
         # drop empty data frames
         data_individual = [df for df in data_individual if len(df) > 0]
         # combine
