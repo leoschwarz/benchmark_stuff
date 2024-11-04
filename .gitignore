@@ -6,3 +6,5 @@ __pycache__
 *.parquet
 *.png
 *.hdf5
+*.json
+*.pkl
